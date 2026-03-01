@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "Qualibot WA Bridge",
+  "short_name": "Qualibot WA Bridge",
+  "version": "2.1.0",
+  "description": "Navega la pestaña existente de WhatsApp Web desde el CRM, sin abrir pestañas nuevas.",
+
+  "permissions": ["tabs", "windows", "scripting", "debugger"],
+  "host_permissions": [
+    "https://web.whatsapp.com/*"
+  ],
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost:3000/*",
+        "http://localhost:5173/*",
+        "http://localhost:4173/*",
+        "http://localhost:8080/*",
+        "https://amaderartecrm.web.app/*",
+        "https://flapzcrm.web.app/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Qualibot WA Bridge"
+  }
+}

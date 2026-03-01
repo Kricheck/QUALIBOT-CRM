@@ -1,0 +1,6 @@
+{
+  "name": "@qualibot/wa-bridge",
+  "version": "2.1.0",
+  "private": true,
+  "description": "Qualibot WA Bridge — Chrome Extension MV3 compartida entre todos los CRMs de Qualibot"
+}

@@ -1,0 +1,16 @@
+{
+  "name": "qualibot-crm",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev:amaderarte": "turbo run dev --filter=amaderarte",
+    "dev:flapz": "turbo run dev --filter=flapz",
+    "build": "turbo run build",
+    "build:amaderarte": "turbo run build --filter=amaderarte",
+    "build:flapz": "turbo run build --filter=flapz"
+  },
+  "devDependencies": {
+    "turbo": "latest"
+  },
+  "packageManager": "pnpm@10.30.3"
+}
