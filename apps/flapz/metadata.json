@@ -1,0 +1,5 @@
+{
+  "name": "Qualibot CRM V0.7.4.",
+  "description": "A focused Kanban CRM for private aviation sales, powered by Google Sheets data.\n\nAgregamos ingreso de leads que cotizan y no siguen.",
+  "requestFramePermissions": []
+}
