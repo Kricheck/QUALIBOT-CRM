@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Qualibot WA Bridge",
   "short_name": "Qualibot WA Bridge",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Navega la pestaña existente de WhatsApp Web desde el CRM, sin abrir pestañas nuevas.",
 
   "permissions": ["tabs", "windows", "scripting", "debugger"],
@@ -18,6 +18,7 @@
     {
       "matches": [
         "http://localhost:3000/*",
+        "http://localhost:3001/*",
         "http://localhost:5173/*",
         "http://localhost:4173/*",
         "http://localhost:8080/*",
