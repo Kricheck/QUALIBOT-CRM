@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Lead, QualityIndicator } from '../types';
+import { Lead, QualityIndicator, NurturingStatus } from '../types';
 import { useLeads } from '../context/LeadsContext';
 import { X, Calendar, DollarSign, Package, Save, MessageCircle, Phone, ChevronDown, Mail, ArrowRightLeft, ArrowRight, Tag, MapPin, PenTool, Megaphone, Sofa, Terminal, Star, CheckSquare, Square } from 'lucide-react';
 import WhatsAppSelectionModal from './WhatsAppSelectionModal';
@@ -199,8 +199,15 @@ const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, isOpen, onClose
       });
       window.dispatchEvent(debugEvent);
 
+      // Si se asigna NQL y aún no tiene nurturingStatus, inicializar en LANDING
+      const nurturingOverride =
+        formData.indicadorCalidad === QualityIndicator.NQL && !formData.nurturingStatus
+          ? { nurturingStatus: NurturingStatus.LANDING }
+          : {};
+
       const leadToSave = {
           ...formData,
+          ...nurturingOverride,
           aeronave: finalProductStr || "Por definir"
       };
 
@@ -312,6 +319,7 @@ const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, isOpen, onClose
                 >
                   <option value={QualityIndicator.MQL}>MQL - Potencial</option>
                   <option value={QualityIndicator.SQL}>SQL - Ideal (+2 Espacios)</option>
+                  <option value={QualityIndicator.NQL}>NQL - En Nurturing</option>
                   <option value={QualityIndicator.NO}>Sin clasificar</option>
                 </select>
                 <ChevronDown size={14} className="absolute right-0 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />

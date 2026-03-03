@@ -2,7 +2,11 @@
 import React, { useState, useEffect } from 'react';
 import whatsappWebService from '../services/whatsappWebService';
 
+// Solo relevante en desktop — la extensión WA Bridge no existe en mobile
+const IS_MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || navigator.maxTouchPoints > 1;
+
 const WhatsAppStatusIndicator: React.FC = () => {
+  if (IS_MOBILE) return null;
   const [status, setStatus] = useState<'connected' | 'disconnected'>(
     whatsappWebService.getStatus()
   );

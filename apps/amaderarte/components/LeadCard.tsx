@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Lead, QualityIndicator, CrmStatus } from '../types';
+import { Lead, QualityIndicator, CrmStatus, NurturingStatus } from '../types';
 import { useLeads } from '../context/LeadsContext';
 import { MessageCircle, Eye, ArrowRight, ArrowLeft, Phone, Ban, ThumbsDown, UserX, Mail, Clock, Star, MapPin, Hammer, ExternalLink, MapPinOff, Store, CheckCircle2, XCircle } from 'lucide-react';
 import LeadDetailModal from './LeadDetailModal';
@@ -98,10 +98,12 @@ const LeadCard: React.FC<LeadCardProps> = ({ lead, onMoveStage, onStatusChange }
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isWAOpen, setIsWAOpen] = useState(false);
   const [showDiscardMenu, setShowDiscardMenu] = useState(false);
+  const [nqlConfirm, setNqlConfirm] = useState(false);
   const discardMenuRef = useRef<HTMLDivElement>(null);
 
   const isSQL = lead.indicadorCalidad === QualityIndicator.SQL;
   const isMQL = lead.indicadorCalidad === QualityIndicator.MQL;
+  const isNQL = lead.indicadorCalidad === QualityIndicator.NQL;
   
   const age = calculateLeadAge(lead.createdAt, lead.crmStatus);
   const isFinalStage = lead.crmStatus === CrmStatus.GANADOS || lead.crmStatus === CrmStatus.PERDIDO || lead.crmStatus === CrmStatus.FUERA_PUBLICO;
@@ -123,12 +125,37 @@ const LeadCard: React.FC<LeadCardProps> = ({ lead, onMoveStage, onStatusChange }
 
   const handleQualityCycle = (e: React.MouseEvent) => {
     e.stopPropagation();
-    let nextQuality: string;
     const current = lead.indicadorCalidad;
+    // Ciclo: No → MQL → SQL → [confirm NQL] → No
+    if (current === QualityIndicator.SQL) {
+      setNqlConfirm(true);
+      return;
+    }
+    if (current === QualityIndicator.NQL) {
+      updateLead({ ...lead, indicadorCalidad: QualityIndicator.NO });
+      return;
+    }
+    let nextQuality: string;
     if (current === QualityIndicator.NO || current === 'No') nextQuality = QualityIndicator.MQL;
     else if (current === QualityIndicator.MQL) nextQuality = QualityIndicator.SQL;
     else nextQuality = QualityIndicator.NO;
     updateLead({ ...lead, indicadorCalidad: nextQuality });
+  };
+
+  const handleConfirmNql = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setNqlConfirm(false);
+    updateLead({
+      ...lead,
+      indicadorCalidad: QualityIndicator.NQL,
+      nurturingStatus: NurturingStatus.LANDING,
+    });
+  };
+
+  const handleRejectNql = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setNqlConfirm(false);
+    updateLead({ ...lead, indicadorCalidad: QualityIndicator.NO });
   };
 
   const toggleFavorite = (e: React.MouseEvent) => {
@@ -146,20 +173,32 @@ const LeadCard: React.FC<LeadCardProps> = ({ lead, onMoveStage, onStatusChange }
         onClick={handleOpenDetails}
         className={`
         relative bg-white p-3 rounded-xl shadow-sm border-l-4 transition-transform hover:-translate-y-1 duration-200 cursor-pointer group/card
-        ${isSQL ? 'border-amber-400' : isMQL ? 'border-blue-400' : 'border-slate-300'}
+        ${isSQL ? 'border-amber-400' : isMQL ? 'border-blue-400' : isNQL ? 'border-teal-400' : 'border-slate-300'}
         ${lead.crmStatus === CrmStatus.PERDIDO ? 'opacity-75 grayscale-[0.5]' : ''}
       `}>
         <div className="flex justify-between items-start mb-1">
             <div className="flex flex-col gap-1.5 items-start">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                    <button 
-                      onClick={handleQualityCycle}
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider cursor-pointer select-none transition-opacity hover:opacity-80
-                        ${isSQL ? 'bg-amber-100 text-amber-700' : isMQL ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}
-                      `}
-                    >
-                        {lead.indicadorCalidad || 'No'}
-                    </button>
+                    {nqlConfirm ? (
+                      <div className="flex items-center gap-1 flex-wrap" onClick={e => e.stopPropagation()}>
+                        <span className="text-[10px] font-semibold text-slate-600">¿Mover a NQL?</span>
+                        <button onClick={handleConfirmNql} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-100 text-teal-700 border border-teal-200 hover:bg-teal-200 transition-colors">
+                          Sí
+                        </button>
+                        <button onClick={handleRejectNql} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 hover:bg-slate-200 transition-colors">
+                          No
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={handleQualityCycle}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider cursor-pointer select-none transition-opacity hover:opacity-80
+                          ${isSQL ? 'bg-amber-100 text-amber-700' : isMQL ? 'bg-blue-100 text-blue-700' : isNQL ? 'bg-teal-100 text-teal-700' : 'bg-slate-100 text-slate-500'}
+                        `}
+                      >
+                          {lead.indicadorCalidad || 'No'}
+                      </button>
+                    )}
 
                     {age.label && (
                         <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded border ${age.colorClass}`}>

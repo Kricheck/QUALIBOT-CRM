@@ -1,5 +1,5 @@
 
-import { Lead, CrmStatus, QualityIndicator } from '../types';
+import { Lead, CrmStatus, QualityIndicator, NurturingStatus, PipelineConfig } from '../types';
 import { MOCK_LEADS } from './mockData';
 
 // --- CONFIGURACIÓN DE CONEXIÓN ---
@@ -24,7 +24,15 @@ const COLUMN_MAP = {
     aux: ['Fuente', 'Origen', 'Medio', 'Campaña'], 
     calidad: ['Calidad', 'Rating', 'Clasificación'],
     linkMaps: ['Link Google Maps', 'Link Maps'],
-    interesShowroom: ['Interés Visitar Showroom']
+    interesShowroom: ['Interés Visitar Showroom'],
+    nurturingStatus: ['Nurturing Status', 'Estado Nurturing'],
+    fechaSeg1: ['Fecha Seg1', 'Fecha Seguimiento 1', 'Fecha Seg 1'],
+    fechaSeg2: ['Fecha Seg2', 'Fecha Seguimiento 2', 'Fecha Seg 2'],
+    fechaSeg3: ['Fecha Seg3', 'Fecha Seguimiento 3', 'Fecha Seg 3'],
+    accionSeg1: ['Accion Seg1', 'Acción Seg1', 'Accion Seguimiento 1'],
+    accionSeg2: ['Accion Seg2', 'Acción Seg2', 'Accion Seguimiento 2'],
+    accionSeg3: ['Accion Seg3', 'Acción Seg3', 'Accion Seguimiento 3'],
+    fechaVenta: ['Fecha Venta', 'Fecha Cierre', 'Sale Date', 'FECHA VENTA']
 };
 
 // --- HELPER DE LOGGING ROBUSTO ---
@@ -94,17 +102,39 @@ const findValueByMap = (row: any, mapKeys: string[]): string => {
 };
 
 const parseTimestamp = (input: any): string => {
-  if (!input) return "1970-01-01T00:00:00.000Z"; 
+  if (!input) return "1970-01-01T00:00:00.000Z";
   let dateStr = String(input).trim().replace(/[\n\r]/g, '').replace(/\s+/g, ' ');
-  if (dateStr.includes('T') && /\d/.test(dateStr)) return dateStr.replace(/\s/g, ''); 
+  if (dateStr.includes('T') && /\d/.test(dateStr)) return dateStr.replace(/\s/g, '');
+  // Soporte para formato DD/M/YYYY HH:mm:ss (formato de Sheets en GMT-5 / Latinoamérica)
+  // new Date("23/2/2026 23:20:46") retorna Invalid Date en V8 cuando día > 12 → parser explícito
+  const dmyMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})$/);
+  if (dmyMatch) {
+    const [, day, month, year, hh, mm, ss] = dmyMatch;
+    const d = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hh), parseInt(mm), parseInt(ss));
+    if (!isNaN(d.getTime())) return d.toISOString();
+  }
   try {
-      const date = new Date(dateStr); 
+      const date = new Date(dateStr);
       if (!isNaN(date.getTime())) return date.toISOString();
   } catch (e) {}
   return "1970-01-01T00:00:00.000Z";
 };
 
 const parseSmartDate = (isoTimestamp: string) => (!isoTimestamp || isoTimestamp.startsWith("1970")) ? "" : isoTimestamp.split('T')[0];
+
+// Parsea "YYYY-MM-DD | Estado" → { date, estado }
+const parseSegField = (raw: string): { date: string; estado: string } => {
+  if (!raw || !raw.trim()) return { date: '', estado: '' };
+  const parts = raw.split('|').map(s => s.trim());
+  return { date: parts[0] || '', estado: parts[1] || '' };
+};
+
+// Serializa { date, estado } → "YYYY-MM-DD | Estado" para backend
+const serializeSegDate = (date?: string, estado?: string): string => {
+  if (!date) return ' ';
+  if (estado) return `${date} | ${estado}`;
+  return date;
+};
 
 const normalizeLead = (rawLead: any): Lead => {
   let sheetName = (rawLead._sheetName || "").trim();
@@ -222,8 +252,24 @@ const normalizeLead = (rawLead: any): Lead => {
       finalDestino = explicitAddress || detailInfo;
   }
 
+  // Nurturing fields
+  const seg1 = parseSegField(findValueByMap(rawLead, COLUMN_MAP.fechaSeg1));
+  const seg2 = parseSegField(findValueByMap(rawLead, COLUMN_MAP.fechaSeg2));
+  const seg3 = parseSegField(findValueByMap(rawLead, COLUMN_MAP.fechaSeg3));
+
   return {
-    id: uniqueId, nombre: findValueByMap(rawLead, COLUMN_MAP.nombre) || "Sin Nombre", apellido: findValueByMap(rawLead, COLUMN_MAP.apellido) || "", correo: findValueByMap(rawLead, COLUMN_MAP.correo), whatsapp: findValueByMap(rawLead, COLUMN_MAP.whatsapp), aeronave: finalAeronave, origen: finalOrigen, destino: finalDestino, valor: findValueByMap(rawLead, COLUMN_MAP.presupuesto), indicadorCalidad: findValueByMap(rawLead, COLUMN_MAP.calidad) || QualityIndicator.NO, vendido: "", fecha: fechaIda, source: findValueByMap(rawLead, COLUMN_MAP.aux) || "Google Sheets", campana: campanaLabel, createdAt: createdAt, crmStatus: status, isFavorite: false, linkMaps: finalLinkMaps, rawData: rawLead, isInteraction: false, hasCoverage: hasCoverage
+    id: uniqueId, nombre: findValueByMap(rawLead, COLUMN_MAP.nombre) || "Sin Nombre", apellido: findValueByMap(rawLead, COLUMN_MAP.apellido) || "", correo: findValueByMap(rawLead, COLUMN_MAP.correo), whatsapp: findValueByMap(rawLead, COLUMN_MAP.whatsapp), aeronave: finalAeronave, origen: finalOrigen, destino: finalDestino, valor: findValueByMap(rawLead, COLUMN_MAP.presupuesto), indicadorCalidad: findValueByMap(rawLead, COLUMN_MAP.calidad) || QualityIndicator.NO, vendido: "", fecha: fechaIda, source: findValueByMap(rawLead, COLUMN_MAP.aux) || "Google Sheets", campana: campanaLabel, createdAt: createdAt, crmStatus: status, isFavorite: false, linkMaps: finalLinkMaps, rawData: rawLead, isInteraction: false, hasCoverage: hasCoverage,
+    nurturingStatus: (findValueByMap(rawLead, COLUMN_MAP.nurturingStatus) as NurturingStatus) || undefined,
+    fechaSeg1: seg1.date || undefined,
+    fechaSeg2: seg2.date || undefined,
+    fechaSeg3: seg3.date || undefined,
+    accionSeg1: findValueByMap(rawLead, COLUMN_MAP.accionSeg1) || undefined,
+    accionSeg2: findValueByMap(rawLead, COLUMN_MAP.accionSeg2) || undefined,
+    accionSeg3: findValueByMap(rawLead, COLUMN_MAP.accionSeg3) || undefined,
+    estadoSeg1: seg1.estado || undefined,
+    estadoSeg2: seg2.estado || undefined,
+    estadoSeg3: seg3.estado || undefined,
+    fechaVenta: parseSmartDate(parseTimestamp(findValueByMap(rawLead, COLUMN_MAP.fechaVenta))) || undefined
   };
 };
 
@@ -304,9 +350,17 @@ export const updateLeadInSheet = async (lead: Lead): Promise<boolean> => {
     'Producto': lead.aeronave,
     'Espacio': lead.aeronave,
     'Espacios': lead.aeronave,
-    'Dirección': lead.destino 
+    'Dirección': lead.destino,
+    'Nurturing Status': lead.nurturingStatus ?? ' ',
+    'Fecha Seg1': serializeSegDate(lead.fechaSeg1, lead.estadoSeg1),
+    'Fecha Seg2': serializeSegDate(lead.fechaSeg2, lead.estadoSeg2),
+    'Fecha Seg3': serializeSegDate(lead.fechaSeg3, lead.estadoSeg3),
+    'Accion Seg1': lead.accionSeg1 ?? ' ',
+    'Accion Seg2': lead.accionSeg2 ?? ' ',
+    'Accion Seg3': lead.accionSeg3 ?? ' ',
+    'Fecha Venta': lead.fechaVenta ?? ' '
   };
-  
+
   if (targetSheetName !== "Amaderarte Leads") leadFields['Estado'] = lead.crmStatus;
 
   const payload = {
@@ -364,6 +418,44 @@ export const updateLeadInSheet = async (lead: Lead): Promise<boolean> => {
 
   } catch (error: any) {
     logDebug("Error Red/Sistema", { msg: error.message }, 'error');
+    return false;
+  }
+};
+
+// --- PIPELINE CONFIG ---
+
+const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
+  YEAR: new Date().getFullYear(),
+  ENE: 0, FEB: 0, MAR: 0, ABR: 0, MAY: 0, JUN: 0,
+  JUL: 0, AGO: 0, SEP: 0, OCT: 0, NOV: 0, DIC: 0,
+  NEG_MULT: 3.0,
+  QUO_MULT: 3.0
+};
+
+export const fetchPipelineConfig = async (): Promise<PipelineConfig | null> => {
+  if (!GOOGLE_SCRIPT_URL) return DEFAULT_PIPELINE_CONFIG;
+  try {
+    const response = await fetch(`${GOOGLE_SCRIPT_URL}?action=get_config`);
+    if (!response.ok) return DEFAULT_PIPELINE_CONFIG;
+    const data = await response.json();
+    if (data.status === 'success' && data.config) return data.config as PipelineConfig;
+    return DEFAULT_PIPELINE_CONFIG;
+  } catch {
+    return DEFAULT_PIPELINE_CONFIG;
+  }
+};
+
+export const savePipelineConfig = async (config: PipelineConfig): Promise<boolean> => {
+  if (!GOOGLE_SCRIPT_URL) return false;
+  try {
+    const response = await fetch(GOOGLE_SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'save_config', config })
+    });
+    if (!response.ok) return false;
+    const data = await response.json();
+    return data.status === 'success';
+  } catch {
     return false;
   }
 };

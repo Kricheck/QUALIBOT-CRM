@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useLeads } from '../context/LeadsContext';
-import { Search, Filter, Clock, ListFilter, ArrowUpDown, Megaphone, Globe, SlidersHorizontal, RotateCcw, BarChart3, Columns, Target, MapPin } from 'lucide-react';
+import { Search, Filter, Clock, ListFilter, ArrowUpDown, Megaphone, Globe, SlidersHorizontal, RotateCcw, BarChart3, Columns, Target, MapPin, Sprout, Funnel } from 'lucide-react';
 import { QualityIndicator } from '../types';
 import { AppView } from '../App';
 import WhatsAppStatusIndicator from './WhatsAppStatusIndicator';
@@ -36,7 +36,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentView, onViewChange }) => {
   const isCategoryActive = filters.campana !== ''; // Original "Campaña" -> Now "Categoría"
   const isOriginActive = filters.source !== ''; // Original "Source" -> Now "Origen"
   const isNewCampaignActive = filters.vuelaEn !== ''; // Original "Product" -> Now "Campaña"
-  const isQualityActive = filters.calidad !== '';
+  const isQualityActive = filters.calidad !== '' && filters.calidad !== 'EXCLUDE_NQL';
   const isSearchActive = filters.searchTerm !== '';
   
   const anyFilterActive = isSortActive || isLimitActive || isCategoryActive || isOriginActive || isNewCampaignActive || isQualityActive || isSearchActive;
@@ -61,6 +61,12 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentView, onViewChange }) => {
                 <div className="bg-slate-100 p-1 rounded-lg flex items-center border border-slate-200 mr-2 shrink-0">
                     <button onClick={() => onViewChange('kanban')} className={`p-1.5 rounded-md transition-all ${currentView === 'kanban' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`} title="Vista Kanban">
                         <Columns size={16} />
+                    </button>
+                    <button onClick={() => onViewChange('nql')} className={`p-1.5 rounded-md transition-all ${currentView === 'nql' ? 'bg-white text-teal-600 shadow-sm' : 'text-slate-400 hover:text-teal-600'}`} title="Pipeline Nurturing (NQL)">
+                        <Sprout size={16} />
+                    </button>
+                    <button onClick={() => onViewChange('pipeline')} className={`p-1.5 rounded-md transition-all ${currentView === 'pipeline' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-blue-600'}`} title="Pipeline de Ventas">
+                        <Funnel size={16} />
                     </button>
                     <button onClick={() => onViewChange('reports')} className={`p-1.5 rounded-md transition-all ${currentView === 'reports' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`} title="Vista Reportes">
                         <BarChart3 size={16} />

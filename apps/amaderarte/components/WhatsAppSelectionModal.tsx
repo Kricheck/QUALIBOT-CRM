@@ -2,9 +2,17 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Lead, CrmStatus } from '../types';
-import { MessageCircle, X, ExternalLink, ArrowLeft, Send } from 'lucide-react';
+import { MessageCircle, X, ExternalLink, ArrowLeft, Send, Copy } from 'lucide-react';
 import whatsappWebService from '../services/whatsappWebService';
 import { useLeads } from '../context/LeadsContext';
+
+// En mobile se usan deep links nativos — WA Bridge no aplica
+const IS_MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || navigator.maxTouchPoints > 1;
+
+const buildMobileWAUrl = (phone: string, message: string, app: 'whatsapp' | 'business'): string => {
+  const scheme = app === 'business' ? 'whatsappbusiness' : 'whatsapp';
+  return `${scheme}://send?phone=${phone}&text=${encodeURIComponent(message)}`;
+};
 
 interface WhatsAppSelectionModalProps {
   lead: Lead;
@@ -18,6 +26,7 @@ const WhatsAppSelectionModal: React.FC<WhatsAppSelectionModalProps> = ({ lead, i
   const [selectedTemplate, setSelectedTemplate] = useState<any | null>(null);
   const [waError, setWaError] = useState<'not_connected' | 'window_lost' | null>(null);
   const [autoSend, setAutoSend] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const { updateLeadStatus } = useLeads();
   const cleanNumber = lead.whatsapp.replace(/[^0-9]/g, '');
@@ -98,6 +107,20 @@ const WhatsAppSelectionModal: React.FC<WhatsAppSelectionModalProps> = ({ lead, i
     }
   };
 
+  const openMobile = (app: 'whatsapp' | 'business') => {
+    if (!previewMessage) return;
+    window.location.href = buildMobileWAUrl(cleanNumber, previewMessage, app);
+    if (lead.crmStatus === CrmStatus.NUEVO) updateLeadStatus(lead.id, CrmStatus.SEGUIMIENTO);
+    onClose();
+  };
+
+  const copyMessage = async () => {
+    if (!previewMessage) return;
+    await navigator.clipboard.writeText(previewMessage);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const handleClose = () => {
     setPreviewMessage(null);
     setSelectedTemplate(null);
@@ -149,8 +172,8 @@ const WhatsAppSelectionModal: React.FC<WhatsAppSelectionModalProps> = ({ lead, i
                     placeholder="Escribe tu mensaje aquí..."
                   />
                   
-                  {/* Banners de error de conexión WA Web */}
-                  {waError === 'not_connected' && (
+                  {/* Desktop: banners de error WA Web */}
+                  {!IS_MOBILE && waError === 'not_connected' && (
                     <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
                       <p className="font-semibold mb-1">WhatsApp Web no está conectado</p>
                       <p className="mb-2 text-red-600">Conecta desde la barra superior y vuelve a intentarlo. La pestaña de WA Web se reutilizará automáticamente.</p>
@@ -162,15 +185,15 @@ const WhatsAppSelectionModal: React.FC<WhatsAppSelectionModalProps> = ({ lead, i
                       </button>
                     </div>
                   )}
-                  {waError === 'window_lost' && (
+                  {!IS_MOBILE && waError === 'window_lost' && (
                     <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
                       <p className="font-semibold mb-1">La pestaña de WhatsApp Web se cerró</p>
                       <p>Reconecta usando el botón en la barra superior y vuelve a intentarlo.</p>
                     </div>
                   )}
 
-                  {/* Opciones de envío + nota informativa */}
-                  {!waError && (
+                  {/* Desktop: opciones de envío */}
+                  {!IS_MOBILE && !waError && (
                     <div className="mt-3 space-y-2">
                       <label className="flex items-center gap-2 cursor-pointer py-2 px-3 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors select-none">
                         <input
@@ -207,13 +230,45 @@ const WhatsAppSelectionModal: React.FC<WhatsAppSelectionModalProps> = ({ lead, i
                     >
                       <ArrowLeft size={16} /> Volver
                     </button>
-                    <button
-                      onClick={() => openWhatsApp(previewMessage || '')}
-                      className="flex-1 py-2 px-4 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors shadow-sm"
-                    >
-                      <Send size={16} /> {autoSend ? 'Enviar Mensaje' : 'Abrir en WA Web'}
-                    </button>
+                    {/* Desktop: botón WA Web */}
+                    {!IS_MOBILE && (
+                      <button
+                        onClick={() => openWhatsApp(previewMessage || '')}
+                        className="flex-1 py-2 px-4 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors shadow-sm"
+                      >
+                        <Send size={16} /> {autoSend ? 'Enviar Mensaje' : 'Abrir en WA Web'}
+                      </button>
+                    )}
                   </div>
+
+                  {/* Mobile: selector de app WhatsApp */}
+                  {IS_MOBILE && (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-xs text-center text-slate-500">
+                        Elige con qué WhatsApp enviar. Si usás otra instancia, copiá el texto.
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => openMobile('whatsapp')}
+                          className="flex-1 flex items-center justify-center gap-2 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium text-sm transition-colors"
+                        >
+                          WhatsApp
+                        </button>
+                        <button
+                          onClick={() => openMobile('business')}
+                          className="flex-1 flex items-center justify-center gap-2 py-3 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-medium text-sm transition-colors"
+                        >
+                          WA Business
+                        </button>
+                      </div>
+                      <button
+                        onClick={copyMessage}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 border border-slate-300 text-slate-600 rounded-xl text-sm hover:bg-slate-50 transition-colors"
+                      >
+                        <Copy size={15} /> {copied ? '¡Copiado!' : 'Copiar mensaje'}
+                      </button>
+                    </div>
+                  )}
                 </>
             </div>
           ) : (

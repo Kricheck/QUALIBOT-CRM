@@ -10,6 +10,11 @@ import { TrendingUp, DollarSign, Users, Target, AlertCircle, MessageSquare, Map,
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#64748b', '#06b6d4', '#ec4899'];
 
+// Devuelve la fecha local como "YYYY-MM-DD" (no UTC). Evita que visitas del horario nocturno
+// GMT-5 (>= 7pm local = >= medianoche UTC) aparezcan en el día siguiente del gráfico.
+const toLocalDateKey = (d: Date): string =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 // Helper to get max days from global filter key
 const getGlobalMaxDays = (filterLimit: string): number => {
     switch (filterLimit) {
@@ -84,14 +89,10 @@ const ReportsDashboard: React.FC = () => {
   // Local state for the specific chart time range
   const [chartDays, setChartDays] = useState<number>(30);
 
-  // Sync Chart Range with Global Filter
+  // Sync Chart Range with Global Filter — siempre seguir al filtro global
   useEffect(() => {
       const maxDays = getGlobalMaxDays(filters.limit);
-      if (maxDays < chartDays) {
-          setChartDays(maxDays);
-      } else if (filters.limit === 'all' && chartDays < 30) {
-           setChartDays(30);
-      }
+      setChartDays(maxDays);
   }, [filters.limit]);
 
   // Format currency helper
@@ -133,12 +134,15 @@ const ReportsDashboard: React.FC = () => {
                 const startOfYesterday = new Date(startOfToday);
                 startOfYesterday.setDate(startOfToday.getDate() - 1);
                 return d >= startOfYesterday && d < startOfToday;
-            case '7_days':
-                const d7 = new Date(now); d7.setDate(now.getDate() - 7); return d >= d7;
-            case '14_days':
-                const d14 = new Date(now); d14.setDate(now.getDate() - 14); return d >= d14;
-            case '30_days':
-                const d30 = new Date(now); d30.setDate(now.getDate() - 30); return d >= d30;
+            case '7_days': {
+                const d7 = new Date(startOfToday); d7.setDate(d7.getDate() - 7); return d >= d7;
+            }
+            case '14_days': {
+                const d14 = new Date(startOfToday); d14.setDate(d14.getDate() - 14); return d >= d14;
+            }
+            case '30_days': {
+                const d30 = new Date(startOfToday); d30.setDate(d30.getDate() - 30); return d >= d30;
+            }
             default:
                 return true;
         }
@@ -223,7 +227,7 @@ const ReportsDashboard: React.FC = () => {
           
           if (createdDate < cutoffDate) return;
 
-          const dateKey = createdDate.toISOString().split('T')[0];
+          const dateKey = toLocalDateKey(createdDate);
 
           let campaign = lead.campana || "Desconocido";
           if (campaign.toUpperCase().startsWith("EMAIL")) {
@@ -267,7 +271,7 @@ const ReportsDashboard: React.FC = () => {
       if (!int.createdAt) return;
       const d = new Date(int.createdAt);
       if (d < cutoffDate) return;
-      const k = d.toISOString().split('T')[0];
+      const k = toLocalDateKey(d);
 
       if (!dataMap[k]) dataMap[k] = { visitasIPs: new Set(), botonWA: 0, botonLanding: 0 };
 
@@ -283,7 +287,7 @@ const ReportsDashboard: React.FC = () => {
     return Object.entries(dataMap).map(([date, val]) => {
       const visitasUnicas = val.visitasIPs.size;
       const totalClics = val.botonWA + val.botonLanding;
-      const ctr = visitasUnicas > 0 ? ((totalClics / visitasUnicas) * 100).toFixed(1) : "0";
+      const ctr = visitasUnicas > 0 ? parseFloat(((totalClics / visitasUnicas) * 100).toFixed(1)) : 0;
       const [y, m, d] = date.split('-');
       const dateObj = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
       const displayDate = dateObj.toLocaleDateString('es-CO', { month: 'short', day: 'numeric' });
@@ -304,7 +308,7 @@ const ReportsDashboard: React.FC = () => {
       if (!int.createdAt || int.interactionType !== 'VISITA') return;
       const d = new Date(int.createdAt);
       if (d < cutoffDate) return;
-      const k = d.toISOString().split('T')[0];
+      const k = toLocalDateKey(d);
       if (!dataMap[k]) dataMap[k] = { visitasIPs: new Set(), leads: 0 };
       if (int.whatsapp) dataMap[k].visitasIPs.add(int.whatsapp);
     });
@@ -313,7 +317,7 @@ const ReportsDashboard: React.FC = () => {
       if (!lead.createdAt) return;
       const d = new Date(lead.createdAt);
       if (d < cutoffDate) return;
-      const k = d.toISOString().split('T')[0];
+      const k = toLocalDateKey(d);
       const campana = (lead.campana || "").toLowerCase();
       if (campana.includes("wa lead") || campana.includes("app")) {
         if (!dataMap[k]) dataMap[k] = { visitasIPs: new Set(), leads: 0 };
@@ -323,7 +327,7 @@ const ReportsDashboard: React.FC = () => {
 
     return Object.entries(dataMap).map(([date, val]) => {
       const visitasUnicas = val.visitasIPs.size;
-      const convRate = visitasUnicas > 0 ? ((val.leads / visitasUnicas) * 100).toFixed(1) : "0";
+      const convRate = visitasUnicas > 0 ? parseFloat(((val.leads / visitasUnicas) * 100).toFixed(1)) : 0;
       const [y, m, d] = date.split('-');
       const dateObj = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
       const displayDate = dateObj.toLocaleDateString('es-CO', { month: 'short', day: 'numeric' });

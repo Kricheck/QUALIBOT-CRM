@@ -1,18 +1,22 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
-import { Lead, FilterState, CrmStatus, QualityIndicator } from '../types';
-import { fetchLeads, updateLeadInSheet, checkBackendHealth } from '../services/sheetsService';
+import { Lead, FilterState, CrmStatus, QualityIndicator, NurturingStatus, PipelineConfig } from '../types';
+import { fetchLeads, updateLeadInSheet, checkBackendHealth, fetchPipelineConfig, savePipelineConfig } from '../services/sheetsService';
 
 interface LeadsContextType {
   leads: Lead[];
   interactions: Lead[]; // Export interactions separately
+  nqlLeads: Lead[];
+  pipelineConfig: PipelineConfig | null;
+  updatePipelineConfig: (config: PipelineConfig) => Promise<boolean>;
   loading: boolean;
   filters: FilterState;
   setFilter: (key: keyof FilterState, value: string) => void;
   resetFilters: () => void;
-  refreshLeads: (showLoading?: boolean) => Promise<void>; 
+  refreshLeads: (showLoading?: boolean) => Promise<void>;
   updateLeadStatus: (leadId: string, newStatus: CrmStatus) => void;
   updateLead: (updatedLead: Lead) => void;
+  updateNurturingStatus: (leadId: string, newStatus: NurturingStatus) => void;
   filteredLeads: Lead[];
   availableAircrafts: string[];
   availableCampaigns: string[];
@@ -23,11 +27,11 @@ const LeadsContext = createContext<LeadsContextType | undefined>(undefined);
 
 const DEFAULT_FILTERS: FilterState = {
   searchTerm: '',
-  calidad: '',
+  calidad: 'EXCLUDE_NQL', // Por defecto, los leads NQL se muestran solo en el panel Nurturing
   vuelaEn: '',
   campana: '',
   source: '',
-  limit: '7_days', 
+  limit: '7_days',
   sortOrder: 'desc'
 };
 
@@ -37,17 +41,30 @@ export const LeadsProvider = ({ children }: React.PropsWithChildren<{}>) => {
   const [allData, setAllData] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
+  const [pipelineConfig, setPipelineConfig] = useState<PipelineConfig | null>(null);
 
   // Centralized data fetching function
   const refreshLeads = async (showLoading = true) => {
     if (showLoading) setLoading(true);
     try {
-      const data = await fetchLeads();
+      const [data, config] = await Promise.all([fetchLeads(), fetchPipelineConfig()]);
       setAllData(data);
+      if (config) setPipelineConfig(config);
     } catch (error) {
       console.error("Failed to load leads", error);
     } finally {
       if (showLoading) setLoading(false);
+    }
+  };
+
+  const updatePipelineConfig = async (config: PipelineConfig): Promise<boolean> => {
+    try {
+      const success = await savePipelineConfig(config);
+      if (success) setPipelineConfig(config);
+      return success;
+    } catch (error) {
+      console.error("Error saving pipeline config:", error);
+      return false;
     }
   };
 
@@ -139,6 +156,61 @@ export const LeadsProvider = ({ children }: React.PropsWithChildren<{}>) => {
     }
   };
 
+  // NQL leads: todos los leads con indicadorCalidad === NQL
+  const nqlLeads = useMemo(() => {
+    return leads.filter(l => l.indicadorCalidad === QualityIndicator.NQL);
+  }, [leads]);
+
+  const updateNurturingStatus = async (leadId: string, newStatus: NurturingStatus) => {
+    const leadToUpdate = allData.find(l => l.id === leadId);
+    if (!leadToUpdate) return;
+
+    let updatedLead: Lead = { ...leadToUpdate, nurturingStatus: newStatus };
+
+    // Caso especial: SQL → promover al pipeline CRM
+    if (newStatus === NurturingStatus.SQL) {
+      updatedLead = {
+        ...updatedLead,
+        indicadorCalidad: QualityIndicator.SQL,
+        crmStatus: CrmStatus.NUEVO
+      };
+    }
+
+    // Optimistic update
+    setAllData(prev => prev.map(item => item.id === leadId ? updatedLead : item));
+
+    try {
+      const success = await updateLeadInSheet(updatedLead);
+      if (!success) {
+        // Rollback
+        setAllData(prev => prev.map(item => item.id === leadId ? leadToUpdate : item));
+        console.warn("Rollback: backend update failed for nurturing status.");
+      }
+    } catch (error) {
+      setAllData(prev => prev.map(item => item.id === leadId ? leadToUpdate : item));
+      console.error("Critical error syncing nurturing status:", error);
+    }
+  };
+
+  // Auto-advance: si today >= fechaSeg1/2/3 y el estado es "Por Ejecutar", avanza
+  useEffect(() => {
+    if (leads.length === 0) return;
+    const today = new Date().toISOString().split('T')[0];
+
+    leads.forEach(lead => {
+      if (lead.indicadorCalidad !== QualityIndicator.NQL) return;
+
+      const shouldAdvance1 = lead.fechaSeg1 && lead.fechaSeg1 <= today && lead.estadoSeg1 !== 'Ejecutado' && lead.nurturingStatus === NurturingStatus.LANDING;
+      const shouldAdvance2 = lead.fechaSeg2 && lead.fechaSeg2 <= today && lead.estadoSeg2 !== 'Ejecutado' && lead.nurturingStatus === NurturingStatus.SEGUIMIENTO_1;
+      const shouldAdvance3 = lead.fechaSeg3 && lead.fechaSeg3 <= today && lead.estadoSeg3 !== 'Ejecutado' && lead.nurturingStatus === NurturingStatus.SEGUIMIENTO_2;
+
+      if (shouldAdvance1) updateNurturingStatus(lead.id, NurturingStatus.SEGUIMIENTO_1);
+      else if (shouldAdvance2) updateNurturingStatus(lead.id, NurturingStatus.SEGUIMIENTO_2);
+      else if (shouldAdvance3) updateNurturingStatus(lead.id, NurturingStatus.SEGUIMIENTO_3);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leads]);
+
   const filteredLeads = useMemo(() => {
     // Paso 0: Usar solo leads de CRM
     let processedLeads = [...leads];
@@ -203,12 +275,13 @@ export const LeadsProvider = ({ children }: React.PropsWithChildren<{}>) => {
         String(lead.whatsapp || "").includes(term) ||
         normalize(String(lead.destino || "")).includes(term);
 
-      // Quality Logic
-      let matchQuality = true;
+      // Quality Logic — NQL siempre va al panel Nurturing, nunca al Kanban principal
+      let matchQuality = lead.indicadorCalidad !== QualityIndicator.NQL;
+
       if (filters.calidad === 'MQL_SQL') {
-        matchQuality = lead.indicadorCalidad === QualityIndicator.MQL || lead.indicadorCalidad === QualityIndicator.SQL;
-      } else if (filters.calidad) {
-        matchQuality = lead.indicadorCalidad === filters.calidad;
+        matchQuality = matchQuality && (lead.indicadorCalidad === QualityIndicator.MQL || lead.indicadorCalidad === QualityIndicator.SQL);
+      } else if (filters.calidad && filters.calidad !== 'EXCLUDE_NQL') {
+        matchQuality = matchQuality && lead.indicadorCalidad === filters.calidad;
       }
       
       // Campaign (Category) Logic
@@ -255,6 +328,9 @@ export const LeadsProvider = ({ children }: React.PropsWithChildren<{}>) => {
     <LeadsContext.Provider value={{
       leads,
       interactions,
+      nqlLeads,
+      pipelineConfig,
+      updatePipelineConfig,
       loading,
       filters,
       setFilter,
@@ -262,6 +338,7 @@ export const LeadsProvider = ({ children }: React.PropsWithChildren<{}>) => {
       refreshLeads,
       updateLeadStatus,
       updateLead,
+      updateNurturingStatus,
       filteredLeads,
       availableAircrafts,
       availableCampaigns,

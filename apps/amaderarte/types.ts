@@ -1,3 +1,4 @@
+import type { BaseLead } from '@qualibot/crm-shell';
 
 export enum CrmStatus {
   NUEVO = "Nuevo",
@@ -13,33 +14,52 @@ export enum CrmStatus {
 export enum QualityIndicator {
   MQL = "MQL",
   SQL = "SQL",
+  NQL = "NQL",
   NO = "No"
 }
 
-export interface Lead {
-  id: string; // Generated for frontend tracking
-  nombre: string;
-  apellido: string;
-  correo: string;
-  whatsapp: string;
-  aeronave: string; // Used for "Right Field" (Producto / Acción / Fachada)
-  origen: string; // Used for "Left Field" (Ubicación / Ciudad)
-  destino: string; // Used for Details / Address
-  valor: string; // Keep as string to handle currency symbols or ranges
+export enum NurturingStatus {
+  LANDING = "Landing",
+  SEGUIMIENTO_1 = "Seguimiento 1",
+  SEGUIMIENTO_2 = "Seguimiento 2",
+  SEGUIMIENTO_3 = "Seguimiento 3",
+  SECUENCIA_EMAIL = "Secuencia Email",
+  SQL = "SQL",
+  PAUSADO = "Pausado",
+  DESCARTADO = "Descartado"
+}
+
+export interface Lead extends BaseLead {
+  // Campos comunes en BaseLead: id, nombre, apellido, correo, whatsapp,
+  // aeronave, origen, destino, valor, indicadorCalidad, vendido, fecha,
+  // fechaRegreso, source, campana, createdAt, crmStatus, isFavorite
   indicadorCalidad: QualityIndicator | string;
-  vendido: string; // "X" or empty
-  fecha: string; // Fecha Ida
-  fechaRegreso?: string; // Fecha Regreso (New field)
-  source: string;
-  campana: string;
-  createdAt?: string; // Timestamp from Column F (Creation Date)
   crmStatus: CrmStatus | string;
-  isFavorite?: boolean; // New Favorite toggle
-  linkMaps?: string; // New field for Google Maps Link (App Leads)
-  rawData?: any; // New field for debugging raw JSON response
-  isInteraction?: boolean; // New field to identify "Consultas" rows
-  interactionType?: 'APP' | 'WHATSAPP' | 'VISITA' | 'BRIDGE' | 'CTA' | string; // New field to classify interactions
-  hasCoverage?: boolean; // New field to indicate coverage status (1 Mueble)
+  linkMaps?: string; // Google Maps Link (App Leads)
+  rawData?: any; // Para debugging del raw JSON response
+  isInteraction?: boolean; // Identifica filas de "Consultas"
+  interactionType?: 'APP' | 'WHATSAPP' | 'VISITA' | 'BRIDGE' | 'CTA' | string;
+  hasCoverage?: boolean; // Estado de cobertura (1 Mueble)
+  // Campos de nurturing (Pipeline NQL)
+  nurturingStatus?: NurturingStatus | string;
+  fechaSeg1?: string;
+  fechaSeg2?: string;
+  fechaSeg3?: string;
+  accionSeg1?: string;
+  accionSeg2?: string;
+  accionSeg3?: string;
+  estadoSeg1?: string;
+  estadoSeg2?: string;
+  estadoSeg3?: string;
+  fechaVenta?: string; // Fecha de cierre (YYYY-MM-DD), filtra GANADOS por mes en Pipeline
+}
+
+export interface PipelineConfig {
+  YEAR: number;
+  ENE: number; FEB: number; MAR: number; ABR: number; MAY: number; JUN: number;
+  JUL: number; AGO: number; SEP: number; OCT: number; NOV: number; DIC: number;
+  NEG_MULT: number; // Multiplicador: cuánto Cotizado se necesita vs meta Ventas
+  QUO_MULT: number; // Multiplicador: cuánto Agendado se necesita vs meta Cotizado
 }
 
 export interface FilterState {
