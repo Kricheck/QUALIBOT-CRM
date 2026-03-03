@@ -152,44 +152,49 @@ crm-monorepo/
 ---
 
 ### Fase 3 — Extraer `crm-shell` (componentes + servicios compartidos)
-**Estado:** ⬜ Pendiente — siguiente fase
+**Estado:** 🔄 En progreso — Fase 3a completada (2026-03-01)
 **Estimación de esfuerzo:** 2-3 sesiones
 **Prerequisito:** Fase 2 completada ✅
+
+> ⚠️ **Hallazgo 2026-03-01 — Revisión de divergencia:** La mayoría de componentes UI divergen
+> significativamente. El criterio de aceptación original ("solo 4 archivos por app") requeriría
+> render props de alta complejidad. Se adopta estrategia en dos partes:
+>
+> - **Fase 3a ✅** (2026-03-01): `BaseLead` + `ErrorBoundary` compartidos — completada
+> - **Fase 3b ⬜:** Componentes con render props — evaluar por componente en sesiones futuras
+>
+> | Componente | Divergencia | Estado |
+> |---|---|---|
+> | `ErrorBoundary` | Mínima | ✅ Extraído a crm-shell |
+> | `whatsappWebService.ts` | Total (estrategias WA distintas) | ⬜ Mantener por app |
+> | `KanbanBoard.tsx` | Estructural (columnas distintas) | ⬜ Fase 3b |
+> | `LeadCard.tsx` | Alta (features exclusivos) | ⬜ Fase 3b |
+> | `FilterBar.tsx` | Media (botones iguales en ambas apps ahora) | ⬜ Fase 3b |
+> | `WhatsAppSelectionModal.tsx` | Media | ⬜ Fase 3b |
+> | `PipelineView.tsx` | Alta (stages y columnas distintas por CRM) | ⬜ Mantener por app |
+> | `PipelineConfigModal.tsx` | Baja (solo labels distintos) | ⬜ Candidato Fase 3b |
+>
+> ⚠️ **Hallazgo 2026-03-02 — Backends en monorepo:** `appscript.gs` de cada CRM ahora vive en
+> `QUALIBOT-CRM/apps/{crm}/backend/`. Regla permanente: NO editar repos legacy. Los repos
+> `AMADERARTE-CRM/` y `FLAPZ-CRM/` serán retirados del workspace. Ver MEMORY.md.
 
 **Objetivo:** Componentes y servicios que son idénticos entre apps viven en `packages/crm-shell/`. Cada app importa desde ahí y solo contiene su divergencia real.
 
 **Tareas:**
 
-- [ ] **3.1** Definir `BaseLead` en `packages/crm-shell/src/types/base.ts`
-  ```typescript
-  export interface BaseLead {
-    id: string;
-    nombre: string;
-    apellido: string;
-    correo: string;
-    whatsapp: string;
-    origen: string;
-    valor: string;
-    indicadorCalidad: QualityIndicator | string;
-    fecha: string;
-    crmStatus: CrmStatus | string;
-    isFavorite?: boolean;
-    source: string;
-    campana: string;
-    createdAt?: string;
-    isInteraction?: boolean;
-    interactionType?: string;
-    customFields: Record<string, string>;
-  }
-  ```
-- [ ] **3.2** En `apps/amaderarte/src/types.ts`: extender `BaseLead` → `AmaderteLead`
-- [ ] **3.3** En `apps/flapz/src/types.ts`: extender `BaseLead` → `FlapzLead`
+- [x] **3.1** Definir `BaseLead` en `packages/crm-shell/src/types/base.ts` ✅ 2026-03-01
+  — Implementado con campos comunes reales (sin `customFields` — las apps tienen campos tipados)
+- [x] **3.2** En `apps/amaderarte/types.ts`: `Lead extends BaseLead` ✅ 2026-03-01
+- [x] **3.3** En `apps/flapz/src/types.ts`: `Lead extends BaseLead` ✅ 2026-03-01
+- [x] **3.extra** Extraer `ErrorBoundary` a `packages/crm-shell/src/components/` ✅ 2026-03-01
+  — Único componente verdaderamente idéntico. Ambas apps importan desde `@qualibot/crm-shell`.
 - [ ] **3.4** Mover componentes compartidos a `packages/crm-shell/src/components/`
-  - `KanbanBoard.tsx`
-  - `LeadCard.tsx`
-  - `FilterBar.tsx`
-  - `LeadDetailModal.tsx`
-  - `WhatsAppSelectionModal.tsx`
+  — ⚠️ Requiere análisis de render props. Ver tabla de divergencia arriba. Reservado para Fase 3b.
+  - `KanbanBoard.tsx` — columnas distintas por app
+  - `LeadCard.tsx` — features muy distintos
+  - `FilterBar.tsx` — vistas extra en Flapz
+  - `LeadDetailModal.tsx` — pendiente comparación
+  - `WhatsAppSelectionModal.tsx` — estrategias WA distintas
 - [ ] **3.5** Parametrizar `LeadsContext` con genérico `<T extends BaseLead>`:
   ```typescript
   export function createLeadsContext<T extends BaseLead>(config: LeadsConfig<T>) { ... }
