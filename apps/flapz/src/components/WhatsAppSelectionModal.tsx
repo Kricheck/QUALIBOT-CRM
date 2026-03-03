@@ -2,8 +2,18 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Lead, CrmStatus } from '../types';
-import { MessageCircle, X, ExternalLink, Sparkles, Loader2, ArrowLeft, Send } from 'lucide-react';
+import { MessageCircle, X, ExternalLink, Sparkles, Loader2, ArrowLeft, Send, Copy } from 'lucide-react';
 import { generateQuoteMessage } from '../services/aiService';
+import whatsappWebService from '../services/whatsappWebService';
+import { useLeads } from '../context/LeadsContext';
+
+// En mobile se usan deep links nativos — WA Bridge no aplica
+const IS_MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || navigator.maxTouchPoints > 1;
+
+const buildMobileWAUrl = (phone: string, message: string, app: 'whatsapp' | 'business'): string => {
+  const scheme = app === 'business' ? 'whatsappbusiness' : 'whatsapp';
+  return `${scheme}://send?phone=${phone}&text=${encodeURIComponent(message)}`;
+};
 
 interface WhatsAppSelectionModalProps {
   lead: Lead;
@@ -16,7 +26,11 @@ const WhatsAppSelectionModal: React.FC<WhatsAppSelectionModalProps> = ({ lead, i
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [previewMessage, setPreviewMessage] = useState<string | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<any | null>(null);
+  const [waError, setWaError] = useState<'not_connected' | 'window_lost' | null>(null);
+  const [autoSend, setAutoSend] = useState(false);
+  const [copied, setCopied] = useState(false);
 
+  const { updateLeadStatus } = useLeads();
   const cleanNumber = lead.whatsapp.replace(/[^0-9]/g, '');
 
   // Master list of all available templates
@@ -50,8 +64,8 @@ const WhatsAppSelectionModal: React.FC<WhatsAppSelectionModalProps> = ({ lead, i
   ];
 
   // Logic to filter templates based on Stage
-  const templates = lead.crmStatus === CrmStatus.COTIZADO 
-    ? allTemplates.filter(t => t.id === 'followup_quote' || t.id === 'closing') 
+  const templates = lead.crmStatus === CrmStatus.COTIZADO
+    ? allTemplates.filter(t => t.id === 'followup_quote' || t.id === 'closing')
     : allTemplates;
 
   // Auto-select template if initialTemplateId is provided when opening
@@ -67,24 +81,49 @@ const WhatsAppSelectionModal: React.FC<WhatsAppSelectionModalProps> = ({ lead, i
       setPreviewMessage(null);
       setGeneratingId(null);
       setSelectedTemplate(null);
+      setWaError(null);
+      setAutoSend(false);
     }
   }, [isOpen, initialTemplateId]);
 
   const openWhatsApp = (msg: string) => {
-    // Fix: Use encodeURIComponent manually. 
-    // URLSearchParams uses '+' for spaces, which can break emojis on some platforms/browsers when passed to WhatsApp.
-    // encodeURIComponent uses '%20' which is safer for the WhatsApp API.
-    const encodedMsg = encodeURIComponent(msg);
-    const url = `https://api.whatsapp.com/send?phone=${cleanNumber}&text=${encodedMsg}`;
-    
-    window.open(url, '_blank');
-    onClose(); // Close modal after sending
+    setWaError(null);
+
+    if (whatsappWebService.getStatus() !== 'connected') {
+      setWaError('not_connected');
+      return;
+    }
+
+    const result = whatsappWebService.sendMessage(cleanNumber, msg, autoSend);
+    if (result.success) {
+      if (lead.crmStatus === CrmStatus.NUEVO) {
+        updateLeadStatus(lead.id, CrmStatus.SEGUIMIENTO);
+      }
+      onClose();
+    } else if (result.reason === 'WINDOW_LOST') {
+      setWaError('window_lost');
+    }
+  };
+
+  const openMobile = (app: 'whatsapp' | 'business') => {
+    if (!previewMessage) return;
+    window.location.href = buildMobileWAUrl(cleanNumber, previewMessage, app);
+    if (lead.crmStatus === CrmStatus.NUEVO) updateLeadStatus(lead.id, CrmStatus.SEGUIMIENTO);
+    onClose();
+  };
+
+  const copyMessage = async () => {
+    if (!previewMessage) return;
+    await navigator.clipboard.writeText(previewMessage);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleClose = () => {
     setPreviewMessage(null);
     setGeneratingId(null);
     setSelectedTemplate(null);
+    setWaError(null);
     onClose();
   };
 
@@ -97,11 +136,9 @@ const WhatsAppSelectionModal: React.FC<WhatsAppSelectionModalProps> = ({ lead, i
             const aiMessage = await generateQuoteMessage(lead);
             setPreviewMessage(aiMessage);
         } catch (error) {
-            // If AI fails, use the fallback constructed in aiService, 
+            // If AI fails, use the fallback constructed in aiService,
             // OR use the template message if the service threw completely.
-            // However, the service catches errors and returns a fallback string usually.
-            // If it returns a string (even fallback), we use it.
-            setPreviewMessage(template.message); 
+            setPreviewMessage(template.message);
         } finally {
             setGeneratingId(null);
         }
@@ -115,11 +152,11 @@ const WhatsAppSelectionModal: React.FC<WhatsAppSelectionModalProps> = ({ lead, i
 
   return createPortal(
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm animate-fade-in" onClick={handleClose}>
-      <div 
-        className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden transform scale-100 flex flex-col max-h-[90vh]" 
+      <div
+        className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden transform scale-100 flex flex-col max-h-[90vh]"
         onClick={e => e.stopPropagation()}
       >
-        
+
         {/* HEADER */}
         <div className="flex justify-between items-center p-4 border-b border-slate-100">
           <h3 className="font-bold text-slate-700 flex items-center">
@@ -130,14 +167,14 @@ const WhatsAppSelectionModal: React.FC<WhatsAppSelectionModalProps> = ({ lead, i
             <X size={18} />
           </button>
         </div>
-        
+
         {/* CONTENT */}
         <div className="p-4 overflow-y-auto">
-          
+
           {previewMessage || generatingId ? (
             // --- EDIT / PREVIEW MODE ---
             <div className="animate-fade-in">
-              
+
               {generatingId ? (
                  <div className="flex flex-col items-center justify-center py-12 text-slate-500 gap-3">
                     <Loader2 size={32} className="animate-spin text-blue-500" />
@@ -147,12 +184,12 @@ const WhatsAppSelectionModal: React.FC<WhatsAppSelectionModalProps> = ({ lead, i
                 <>
                   {selectedTemplate?.isAi ? (
                     <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3 text-xs text-amber-800 flex gap-2 items-start">
-                       <span>🤖</span> 
+                       <span>🤖</span>
                        <span>Este mensaje fue generado por IA. Por favor revísalo antes de enviar.</span>
                     </div>
                   ) : (
                     <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-3 text-xs text-slate-600 flex gap-2 items-start">
-                       <span>✏️</span> 
+                       <span>✏️</span>
                        <span>Puedes editar esta plantilla antes de enviarla.</span>
                     </div>
                   )}
@@ -163,24 +200,104 @@ const WhatsAppSelectionModal: React.FC<WhatsAppSelectionModalProps> = ({ lead, i
                     className="w-full h-64 p-3 text-sm bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none font-sans text-slate-700 leading-relaxed"
                     placeholder="Escribe tu mensaje aquí..."
                   />
-                  
-                  <div className="flex gap-3 mt-4">
-                    <button 
+
+                  {/* Desktop: banners de error WA Web */}
+                  {!IS_MOBILE && waError === 'not_connected' && (
+                    <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+                      <p className="font-semibold mb-1">WhatsApp Web no está conectado</p>
+                      <p className="mb-2 text-red-600">Conecta desde la barra superior y vuelve a intentarlo. La pestaña de WA Web se reutilizará automáticamente.</p>
+                      <button
+                        onClick={() => { whatsappWebService.connect(); setWaError(null); }}
+                        className="w-full py-1.5 px-3 bg-red-600 hover:bg-red-700 text-white rounded-md font-medium transition-colors"
+                      >
+                        Conectar ahora
+                      </button>
+                    </div>
+                  )}
+                  {!IS_MOBILE && waError === 'window_lost' && (
+                    <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+                      <p className="font-semibold mb-1">La pestaña de WhatsApp Web se cerró</p>
+                      <p>Reconecta usando el botón en la barra superior y vuelve a intentarlo.</p>
+                    </div>
+                  )}
+
+                  {/* Desktop: opciones de envío */}
+                  {!IS_MOBILE && !waError && (
+                    <div className="mt-3 space-y-2">
+                      <label className="flex items-center gap-2 cursor-pointer py-2 px-3 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors select-none">
+                        <input
+                          type="checkbox"
+                          checked={autoSend}
+                          onChange={e => setAutoSend(e.target.checked)}
+                          className="w-4 h-4 cursor-pointer accent-green-600"
+                        />
+                        <span className="text-xs text-slate-700 font-medium">Enviar automáticamente</span>
+                      </label>
+                      {!autoSend && (
+                        <p className="text-xs text-blue-600 flex gap-2 items-center px-1">
+                          <span>ℹ️</span>
+                          <span>El mensaje quedará listo en WA Web. Presiona <strong>Enviar</strong> para confirmarlo.</span>
+                        </p>
+                      )}
+                      {autoSend && (
+                        <p className="text-xs text-amber-600 flex gap-2 items-center px-1">
+                          <span>⚡</span>
+                          <span>El mensaje se enviará automáticamente. Revísalo bien antes de abrir.</span>
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex gap-3 mt-3">
+                    <button
                       onClick={() => {
                           setPreviewMessage(null);
                           setSelectedTemplate(null);
+                          setWaError(null);
                       }}
                       className="flex-1 py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors"
                     >
                       <ArrowLeft size={16} /> Volver
                     </button>
-                    <button 
-                      onClick={() => openWhatsApp(previewMessage || '')}
-                      className="flex-1 py-2 px-4 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors shadow-sm"
-                    >
-                      <Send size={16} /> Abrir WhatsApp
-                    </button>
+                    {/* Desktop: botón WA Web */}
+                    {!IS_MOBILE && (
+                      <button
+                        onClick={() => openWhatsApp(previewMessage || '')}
+                        className="flex-1 py-2 px-4 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors shadow-sm"
+                      >
+                        <Send size={16} /> {autoSend ? 'Enviar Mensaje' : 'Abrir en WA Web'}
+                      </button>
+                    )}
                   </div>
+
+                  {/* Mobile: selector de app WhatsApp */}
+                  {IS_MOBILE && (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-xs text-center text-slate-500">
+                        Elige con qué WhatsApp enviar. Si usás otra instancia, copiá el texto.
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => openMobile('whatsapp')}
+                          className="flex-1 flex items-center justify-center gap-2 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium text-sm transition-colors"
+                        >
+                          WhatsApp
+                        </button>
+                        <button
+                          onClick={() => openMobile('business')}
+                          className="flex-1 flex items-center justify-center gap-2 py-3 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-medium text-sm transition-colors"
+                        >
+                          WA Business
+                        </button>
+                      </div>
+                      <button
+                        onClick={copyMessage}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 border border-slate-300 text-slate-600 rounded-xl text-sm hover:bg-slate-50 transition-colors"
+                      >
+                        <Copy size={15} /> {copied ? '¡Copiado!' : 'Copiar mensaje'}
+                      </button>
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -200,7 +317,7 @@ const WhatsAppSelectionModal: React.FC<WhatsAppSelectionModalProps> = ({ lead, i
                     </span>
                     <ExternalLink size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
                   </span>
-                  
+
                   <span className="text-xs opacity-90 line-clamp-2">
                     "{t.message}"
                   </span>

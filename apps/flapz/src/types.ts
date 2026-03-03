@@ -1,3 +1,4 @@
+import type { BaseLead } from '@qualibot/crm-shell';
 
 export enum CrmStatus {
   NUEVO = "Nuevo",
@@ -47,31 +48,18 @@ export interface PipelineConfig {
   QUO_MULT: number; // How much Pipeline value in Quote is needed vs Negotiation Target
 }
 
-export interface Lead {
-  id: string; // Generated for frontend tracking
-  nombre: string;
-  apellido: string;
-  correo: string;
-  whatsapp: string;
-  aeronave: string;
-  origen: string;
-  destino: string;
-  valor: string; // Keep as string to handle currency symbols or ranges
+export interface Lead extends BaseLead {
+  // Campos comunes en BaseLead: id, nombre, apellido, correo, whatsapp,
+  // aeronave, origen, destino, valor, indicadorCalidad, vendido, fecha,
+  // fechaRegreso, source, campana, createdAt, crmStatus, isFavorite
   indicadorCalidad: QualityIndicator | string;
-  vendido: string; // "X" or empty
-  fecha: string; // Fecha Ida
-  fechaRegreso?: string; // Fecha Regreso (New field)
-  fechaVenta?: string; // Fecha Venta (New field for WON deals)
-  source: string;
-  campana: string;
-  createdAt?: string; // Timestamp from Column F (Creation Date)
   crmStatus: CrmStatus | string;
-  isFavorite?: boolean; // New Favorite toggle
-  emailOpened?: boolean | 'SENT'; // Updated: Supports boolean (TRUE/FALSE) or string 'SENT'
-  // Apollo-specific fields
-  cargo?: string;     // Job title from Apollo.io
-  compania?: string;  // Company name from Apollo.io
-  // Nurturing pipeline fields
+  fechaVenta?: string; // Fecha Venta — leads ganados
+  emailOpened?: boolean | 'SENT'; // Boolean (TRUE/FALSE) o 'SENT'
+  // Campos Apollo.io
+  cargo?: string;
+  compania?: string;
+  // Nurturing pipeline
   nurturingStatus?: NurturingStatus | string;
   fechaSeg1?: string;
   fechaSeg2?: string;

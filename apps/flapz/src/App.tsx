@@ -6,6 +6,7 @@ import KanbanBoard from './components/KanbanBoard';
 import ReportsDashboard from './components/ReportsDashboard';
 import PipelineView from './components/PipelineView';
 import NQLKanbanBoard from './components/NQLKanbanBoard';
+import DebugLogger from './components/DebugLogger';
 
 export type AppView = 'kanban' | 'reports' | 'pipeline' | 'nql';
 
@@ -27,6 +28,7 @@ const App = () => {
             <ReportsDashboard />
           )}
         </main>
+        <DebugLogger />
       </div>
     </LeadsProvider>
   );

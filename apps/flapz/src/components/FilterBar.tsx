@@ -4,6 +4,7 @@ import { useLeads } from '../context/LeadsContext';
 import { Search, Filter, Clock, ListFilter, ArrowUpDown, Megaphone, Globe, SlidersHorizontal, RotateCcw, BarChart3, Columns, Funnel, Sprout } from 'lucide-react';
 import { QualityIndicator } from '../types';
 import { AppView } from '../App';
+import WhatsAppStatusIndicator from './WhatsAppStatusIndicator';
 
 interface FilterBarProps {
   currentView: AppView;
@@ -138,6 +139,8 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentView, onViewChange }) => {
                         <BarChart3 size={16} />
                     </button>
                 </div>
+
+                <WhatsAppStatusIndicator />
 
                 {/* HIDE FILTERS IF PIPELINE / REPORTS VIEW */}
                 {showFiltersBar && (

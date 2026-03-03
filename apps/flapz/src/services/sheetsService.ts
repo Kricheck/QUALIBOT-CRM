@@ -2,6 +2,19 @@
 import { Lead, CrmStatus, QualityIndicator, PipelineConfig } from '../types';
 import { MOCK_LEADS } from './mockData';
 
+// Helper: emite un evento crm-debug-log visible en DebugLogger
+const logData = (title: string, data?: unknown, type: 'info' | 'success' | 'error' | 'request' = 'info') => {
+  window.dispatchEvent(new CustomEvent('crm-debug-log', {
+    detail: {
+      id: `sheets-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      timestamp: new Date().toLocaleTimeString(),
+      title: `[Sheets] ${title}`,
+      data: data ?? null,
+      type,
+    }
+  }));
+};
+
 // ---------------------------------------------------------------------------
 // CONFIGURACIÓN DE ENDPOINTS
 // ---------------------------------------------------------------------------
@@ -317,8 +330,14 @@ export const fetchLeads = async (): Promise<Lead[]> => {
     const crmUrl = getApiUrl();
     const rawUrl = PRECOTIZADOR_SCRIPT_URL;
 
+    logData('fetchLeads iniciado', {
+        crmUrl: crmUrl ? `${crmUrl.slice(0, 60)}...` : '(vacío)',
+        precotizadorUrl: rawUrl ? `${rawUrl.slice(0, 60)}...` : '(vacío)',
+    });
+
     // If no URL configured, return Mock Data
     if (!crmUrl || crmUrl.includes("script.google.com/macros/s/...")) {
+        logData('URL no configurada — usando MOCK_LEADS', { crmUrl }, 'error');
         console.warn("Using Mock Data (No valid URL configured).");
         return MOCK_LEADS.map(l => ({ ...l }));
     }
@@ -326,19 +345,28 @@ export const fetchLeads = async (): Promise<Lead[]> => {
     try {
         // Helper: fetch con validación de status HTTP y tipo de respuesta
         const safeFetch = async (url: string, label: string): Promise<any[]> => {
+            if (!url) {
+                logData(`${label}: URL vacía — omitiendo fetch`, null, 'info');
+                return [];
+            }
             try {
+                logData(`${label}: iniciando fetch`, { url: `${url.slice(0, 60)}...` }, 'request');
                 const r = await fetch(url);
                 if (!r.ok) {
+                    logData(`${label}: error HTTP ${r.status}`, { status: r.status, statusText: r.statusText }, 'error');
                     console.error(`[sheetsService] ${label}: HTTP ${r.status} ${r.statusText}`);
                     return [];
                 }
                 const data = await r.json();
                 if (!Array.isArray(data)) {
+                    logData(`${label}: respuesta inesperada (no es array)`, data, 'error');
                     console.error(`[sheetsService] ${label}: respuesta inesperada (no es array)`, data);
                     return [];
                 }
+                logData(`${label}: fetch OK`, { filas: data.length }, 'success');
                 return data;
             } catch (e) {
+                logData(`${label}: error de red o parseo`, { error: String(e) }, 'error');
                 console.error(`[sheetsService] ${label}: error de red o parseo`, e);
                 return [];
             }
@@ -413,9 +441,16 @@ export const fetchLeads = async (): Promise<Lead[]> => {
             return dateB - dateA; // Descending
         });
 
+        logData('fetchLeads completado', {
+            crmLeads: normalizedCrmLeads.length,
+            precotizadorLeads: latestRawLeadsMap.size,
+            total: finalLeads.length,
+        }, 'success');
+
         return finalLeads;
 
     } catch (error) {
+        logData('fetchLeads — error inesperado', { error: String(error) }, 'error');
         console.error("Error fetching leads:", error);
         return MOCK_LEADS.map(l => ({ ...l }));
     }

@@ -29,14 +29,10 @@ const ReportsDashboard: React.FC = () => {
   // Local state for the specific chart time range
   const [chartDays, setChartDays] = useState<number>(30);
 
-  // Sync Chart Range with Global Filter
+  // Sync Chart Range with Global Filter — siempre seguir al filtro global
   useEffect(() => {
       const maxDays = getGlobalMaxDays(filters.limit);
-      if (maxDays < chartDays) {
-          setChartDays(maxDays);
-      } else if (filters.limit === 'all' && chartDays < 30) {
-           setChartDays(30);
-      }
+      setChartDays(maxDays);
   }, [filters.limit]);
 
   // Format currency helper
@@ -125,7 +121,12 @@ const ReportsDashboard: React.FC = () => {
           
           if (createdDate < cutoffDate) return;
 
-          const dateKey = createdDate.toISOString().split('T')[0];
+          // Usar fecha local (no UTC) para evitar que leads de tarde GMT-5
+          // aparezcan en el día siguiente al cruzar la medianoche UTC
+          const localY = createdDate.getFullYear();
+          const localM = String(createdDate.getMonth() + 1).padStart(2, '0');
+          const localD = String(createdDate.getDate()).padStart(2, '0');
+          const dateKey = `${localY}-${localM}-${localD}`;
 
           let campaign = lead.campana || "Desconocido";
           if (campaign.toUpperCase().startsWith("EMAIL")) {
