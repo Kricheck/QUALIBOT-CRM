@@ -19,7 +19,6 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   public static getDerivedStateFromError(error: Error): Partial<State> {
-    // Update state so the next render will show the fallback UI.
     return { hasError: true, error };
   }
 
@@ -39,16 +38,16 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   private handleReset = () => {
-     this.setState({ hasError: false, error: null, errorInfo: null });
-     window.location.href = '/';
-  }
+    this.setState({ hasError: false, error: null, errorInfo: null });
+    window.location.href = '/';
+  };
 
   public render() {
     if (this.state.hasError) {
       return (
         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans">
           <div className="max-w-2xl w-full bg-white rounded-xl shadow-2xl overflow-hidden border border-red-200">
-            
+
             {/* Header */}
             <div className="bg-red-600 px-6 py-4 flex items-center gap-3">
               <AlertTriangle className="text-white h-8 w-8" />
@@ -76,15 +75,15 @@ export class ErrorBoundary extends Component<Props, State> {
 
               {/* Actions */}
               <div className="flex flex-col sm:flex-row gap-3">
-                <button 
+                <button
                   onClick={this.handleReload}
                   className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors"
                 >
                   <RefreshCw size={18} />
                   Recargar Página
                 </button>
-                
-                <button 
+
+                <button
                   onClick={this.handleCopyError}
                   className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors border border-slate-200"
                 >
@@ -92,7 +91,7 @@ export class ErrorBoundary extends Component<Props, State> {
                   Copiar Error
                 </button>
 
-                 <button 
+                <button
                   onClick={this.handleReset}
                   className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors border border-slate-200"
                 >
@@ -101,7 +100,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 </button>
               </div>
             </div>
-            
+
             <div className="bg-slate-50 px-6 py-3 border-t border-slate-200 text-center">
               <p className="text-xs text-slate-500">
                 Si el error persiste, por favor comparte este reporte con el soporte técnico.
