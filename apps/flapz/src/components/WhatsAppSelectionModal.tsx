@@ -5,14 +5,25 @@ import { Lead, CrmStatus } from '../types';
 import { MessageCircle, X, ExternalLink, Sparkles, Loader2, ArrowLeft, Send, Copy } from 'lucide-react';
 import { generateQuoteMessage } from '../services/aiService';
 import whatsappWebService from '../services/whatsappWebService';
-import { useLeads } from '../context/LeadsContext';
+
 
 // En mobile se usan deep links nativos — WA Bridge no aplica
 const IS_MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || navigator.maxTouchPoints > 1;
+const IS_IOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 const buildMobileWAUrl = (phone: string, message: string, app: 'whatsapp' | 'business'): string => {
-  const scheme = app === 'business' ? 'whatsappbusiness' : 'whatsapp';
-  return `${scheme}://send?phone=${phone}&text=${encodeURIComponent(message)}`;
+  const encoded = encodeURIComponent(message);
+  if (app === 'business') {
+    if (IS_IOS) {
+      // iOS registra el scheme whatsappbusiness://
+      return `whatsappbusiness://send?phone=${phone}&text=${encoded}`;
+    }
+    // Android: intent:// abre WA Business directamente en Chrome (browser predominante)
+    // Si el browser no soporta intent://, el usuario puede usar el botón WhatsApp (muestra picker) o Copiar
+    return `intent://send?phone=${phone}&text=${encoded}#Intent;scheme=whatsapp;package=com.whatsapp.w4b;end`;
+  }
+  // WA regular: mismo scheme en iOS y Android; si hay múltiples WA instalados el OS muestra "Abrir con"
+  return `whatsapp://send?phone=${phone}&text=${encoded}`;
 };
 
 interface WhatsAppSelectionModalProps {
@@ -30,7 +41,7 @@ const WhatsAppSelectionModal: React.FC<WhatsAppSelectionModalProps> = ({ lead, i
   const [autoSend, setAutoSend] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const { updateLeadStatus } = useLeads();
+
   const cleanNumber = lead.whatsapp.replace(/[^0-9]/g, '');
 
   // Master list of all available templates
@@ -96,9 +107,6 @@ const WhatsAppSelectionModal: React.FC<WhatsAppSelectionModalProps> = ({ lead, i
 
     const result = whatsappWebService.sendMessage(cleanNumber, msg, autoSend);
     if (result.success) {
-      if (lead.crmStatus === CrmStatus.NUEVO) {
-        updateLeadStatus(lead.id, CrmStatus.SEGUIMIENTO);
-      }
       onClose();
     } else if (result.reason === 'WINDOW_LOST') {
       setWaError('window_lost');
@@ -108,7 +116,6 @@ const WhatsAppSelectionModal: React.FC<WhatsAppSelectionModalProps> = ({ lead, i
   const openMobile = (app: 'whatsapp' | 'business') => {
     if (!previewMessage) return;
     window.location.href = buildMobileWAUrl(cleanNumber, previewMessage, app);
-    if (lead.crmStatus === CrmStatus.NUEVO) updateLeadStatus(lead.id, CrmStatus.SEGUIMIENTO);
     onClose();
   };
 
@@ -274,7 +281,10 @@ const WhatsAppSelectionModal: React.FC<WhatsAppSelectionModalProps> = ({ lead, i
                   {IS_MOBILE && (
                     <div className="mt-3 space-y-2">
                       <p className="text-xs text-center text-slate-500">
-                        Elige con qué WhatsApp enviar. Si usás otra instancia, copiá el texto.
+                        {IS_IOS
+                          ? 'Elige con qué WhatsApp enviar. Para otra instancia, copiá el texto.'
+                          : 'En Android podés elegir la app en el cuadro "Abrir con". Para instancias virtuales, copiá el texto.'
+                        }
                       </p>
                       <div className="flex gap-2">
                         <button
